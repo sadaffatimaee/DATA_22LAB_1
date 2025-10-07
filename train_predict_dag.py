@@ -4,16 +4,19 @@ from airflow.models import Variable
 from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
 from datetime import datetime
 import traceback
+from airflow.datasets import Dataset
 
 SNOWFLAKE_CONN_ID = "snowflake_conn"
 SF_DB  = Variable.get("sf_database",  default_var="USER_DB_JELLYFISH")
 SF_SC  = Variable.get("sf_schema",    default_var="RAW")
 SF_WH  = Variable.get("sf_warehouse", default_var="JELLYFISH_QUERY_WH")
 
+RAW_PRICES_DS = Dataset(f"snowflake://{SF_DB}/{SF_SC}/RAW_PRICES")
+
 with DAG(
     dag_id="TrainPredict",
     description="Snowflake ML: create model, forecast 7 days, union into FINAL_PRICES.",
-    schedule="@daily",
+    schedule=[RAW_PRICES_DS],
     start_date=datetime(2025, 1, 1),
     catchup=False,
     tags=["snowflake","ml","elt"],

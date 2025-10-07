@@ -8,11 +8,15 @@ from datetime import datetime
 import pandas as pd
 import yfinance as yf
 import time, traceback
+from airflow.datasets import Dataset
+from airflow.operators.empty import EmptyOperator
 
 SNOWFLAKE_CONN_ID = "snowflake_conn"
 SF_DB  = Variable.get("sf_database",  default_var="USER_DB_JELLYFISH")
 SF_SC  = Variable.get("sf_schema",    default_var="RAW")
 SF_WH  = Variable.get("sf_warehouse", default_var="JELLYFISH_QUERY_WH")
+
+RAW_PRICES_DS = Dataset(f"snowflake://{SF_DB}/{SF_SC}/RAW_PRICES")
 try:
     TICKERS = Variable.get("STOCK_TICKERS", deserialize_json=True)
 except Exception:
@@ -138,4 +142,11 @@ with DAG(
             cur.close(); conn.close()
 
     extracted = extract_transform.expand(ticker=TICKERS)
-    load_to_snowflake.expand(data_json=extracted)
+    loads = load_to_snowflake.expand(data_json=extracted)
+
+# Emit the dataset event once, after ALL tickers are loaded.
+raw_prices_ready = EmptyOperator(
+    task_id="raw_prices_ready",
+    outlets=[RAW_PRICES_DS]
+)
+loads >> raw_prices_ready
